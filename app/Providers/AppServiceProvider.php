@@ -119,7 +119,8 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::before(fn (User $user, $ability) => $user->isRootAdmin() ? true : null);
 
-        AboutCommand::add('Pelican', [
+        // Resolved lazily, so the version lookups only run for "artisan about" instead of on every request.
+        AboutCommand::add('Pelican', fn () => [
             'Panel Version' => $versionService->currentPanelVersion(),
             'Latest Version' => $versionService->latestPanelVersion() ?? 'Unknown',
             'Up-to-Date' => is_null($versionService->latestPanelVersion())
