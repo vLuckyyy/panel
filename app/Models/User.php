@@ -517,7 +517,8 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
 
     public function getTenants(Panel $panel): array|Collection
     {
-        return $this->accessibleServers()->get();
+        // The tenant menu falls back to the egg icon for every server without its own icon
+        return $this->accessibleServers()->with('egg')->get();
     }
 
     public function canAccessTenant(Model $tenant): bool
