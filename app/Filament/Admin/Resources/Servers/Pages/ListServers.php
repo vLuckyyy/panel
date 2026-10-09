@@ -31,6 +31,8 @@ class ListServers extends ListRecords
     public function table(Table $table): Table
     {
         return $table
+            // The primary allocation select reads every row's allocations
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('allocations'))
             ->defaultGroup('node.name')
             ->groups([
                 Group::make('node.name')->getDescriptionFromRecordUsing(fn (Server $server) => str($server->node->description)->limit(150)),
