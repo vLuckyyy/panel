@@ -480,10 +480,7 @@ class Server extends Model implements HasAvatar, Validatable
         }
 
         return cache()->remember("servers.$this->uuid.status", now()->addSeconds(15), function () {
-            // @phpstan-ignore myCustomRules.forbiddenGlobalFunctions
-            $details = app(DaemonServerRepository::class)->setServer($this)->getDetails();
-
-            return ContainerStatus::tryFrom(Arr::get($details, 'state')) ?? ContainerStatus::Missing;
+            return ContainerStatus::tryFrom(Arr::get($this->retrieveDetails(), 'state')) ?? ContainerStatus::Missing;
         });
     }
 
@@ -497,11 +494,20 @@ class Server extends Model implements HasAvatar, Validatable
         }
 
         return cache()->remember("servers.$this->uuid.resources", now()->addSeconds(15), function () {
-            // @phpstan-ignore myCustomRules.forbiddenGlobalFunctions
-            $details = app(DaemonServerRepository::class)->setServer($this)->getDetails();
-
-            return Arr::get($details, 'utilization', []);
+            return Arr::get($this->retrieveDetails(), 'utilization', []);
         });
+    }
+
+    /**
+     * The status and the resources are both read from the same daemon endpoint, so this is
+     * memoized to make a single request when both of their caches have expired.
+     *
+     * @return array<string, mixed>
+     */
+    private function retrieveDetails(): array
+    {
+        // @phpstan-ignore myCustomRules.forbiddenGlobalFunctions
+        return once(fn () => app(DaemonServerRepository::class)->setServer($this)->getDetails());
     }
 
     public function formatResource(ServerResourceType $resourceType, int $precision = 2): string
