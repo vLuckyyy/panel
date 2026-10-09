@@ -49,6 +49,17 @@ class SoftwareVersionServiceTest extends TestCase
         $this->assertNull($this->service->latestPanelVersionChangelog());
     }
 
+    public function test_failed_fetch_is_not_retried_on_every_call(): void
+    {
+        Http::fake(['api.github.com/*' => Http::response(null, 500)]);
+
+        $this->assertNull($this->service->latestPanelVersion());
+        $this->assertNull($this->service->latestPanelVersion());
+        $this->assertTrue($this->service->isLatestPanel());
+
+        Http::assertSentCount(1);
+    }
+
     public function test_is_latest_panel_when_fetch_fails(): void
     {
         config()->set('app.version', '1.0.0');

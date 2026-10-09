@@ -2,6 +2,7 @@
 
 namespace App\Services\Helpers;
 
+use Closure;
 use Exception;
 use Illuminate\Support\Facades\Http;
 
@@ -9,62 +10,17 @@ class SoftwareVersionService
 {
     public function latestPanelVersionChangelog(): ?string
     {
-        $key = 'panel:latest_version_changelog';
-        if (cache()->get($key) === 'error') {
-            cache()->forget($key);
-        }
-
-        $changelog = cache()->remember($key, now()->addMinutes(config('panel.cdn.cache_time', 60)), function () {
-            try {
-                $response = Http::timeout(5)->connectTimeout(1)->get('https://api.github.com/repos/pelican/panel/releases/latest')->throw()->json();
-
-                return $response['body'];
-            } catch (Exception) {
-                return 'error';
-            }
-        });
-
-        return $changelog === 'error' ? null : $changelog;
+        return $this->rememberLatestRelease('panel:latest_version_changelog', 'pelican/panel', fn (array $release) => $release['body']);
     }
 
     public function latestPanelVersion(): ?string
     {
-        $key = 'panel:latest_version';
-        if (cache()->get($key) === 'error') {
-            cache()->forget($key);
-        }
-
-        $version = cache()->remember($key, now()->addMinutes(config('panel.cdn.cache_time', 60)), function () {
-            try {
-                $response = Http::timeout(5)->connectTimeout(1)->get('https://api.github.com/repos/pelican/panel/releases/latest')->throw()->json();
-
-                return trim($response['tag_name'], 'v');
-            } catch (Exception) {
-                return 'error';
-            }
-        });
-
-        return $version === 'error' ? null : $version;
+        return $this->rememberLatestRelease('panel:latest_version', 'pelican/panel', fn (array $release) => trim($release['tag_name'], 'v'));
     }
 
     public function latestWingsVersion(): ?string
     {
-        $key = 'wings:latest_version';
-        if (cache()->get($key) === 'error') {
-            cache()->forget($key);
-        }
-
-        $version = cache()->remember($key, now()->addMinutes(config('panel.cdn.cache_time', 60)), function () {
-            try {
-                $response = Http::timeout(5)->connectTimeout(1)->get('https://api.github.com/repos/pelican/wings/releases/latest')->throw()->json();
-
-                return trim($response['tag_name'], 'v');
-            } catch (Exception) {
-                return 'error';
-            }
-        });
-
-        return $version === 'error' ? null : $version;
+        return $this->rememberLatestRelease('wings:latest_version', 'pelican/wings', fn (array $release) => trim($release['tag_name'], 'v'));
     }
 
     public function isLatestPanel(): bool
@@ -118,5 +74,32 @@ class SoftwareVersionService
         $version = config('app.version');
 
         return $version === 'canary' ? null : $version;
+    }
+
+    /**
+     * Failed lookups are cached as well, but only briefly, so an unreachable or rate limited
+     * GitHub API is retried soon without being queried again on every single call.
+     *
+     * @param  Closure(array<string, mixed>): ?string  $extract
+     */
+    private function rememberLatestRelease(string $key, string $repository, Closure $extract): ?string
+    {
+        $value = cache()->get($key);
+
+        if (is_null($value)) {
+            try {
+                $release = Http::timeout(5)->connectTimeout(1)->get("https://api.github.com/repos/$repository/releases/latest")->throw()->json();
+
+                $value = $extract($release);
+
+                cache()->put($key, $value, now()->addMinutes(config('panel.cdn.cache_time', 60)));
+            } catch (Exception) {
+                $value = 'error';
+
+                cache()->put($key, $value, now()->addMinutes(5));
+            }
+        }
+
+        return $value === 'error' ? null : $value;
     }
 }
